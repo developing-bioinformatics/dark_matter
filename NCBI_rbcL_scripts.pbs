@@ -1,0 +1,56 @@
+#!/bin/bash -l
+#
+#Number of cores requested
+#$ -pe omp 12
+
+#Give the name to the job
+#$ -N NCBI_rbcL_all
+
+#Output file destination
+#$ -o outputs/$JOB_NAME.o$JOB_ID
+
+#Send an email when the job is finished (or aborted)
+#$ -M enpederson@gmail.com
+#$ -m ae
+
+
+#Join the error and output file
+#$ -j y
+
+
+# Set the runtime limit (default 16 hours):
+#$ -l h_rt=18:00:00
+
+# Specify your project
+#$ -P ct-shbioinf
+
+
+# Stuff to execute: 
+
+module load blast+ #load blast module
+module load sratoolkit
+module load R/3.6.2 #load R3.6.2
+
+cd /projectnb/ct-shbioinf/epederso/bioinf_final/ #use your notes or project folder. Wherever your script is located
+
+#Swamps
+echo "SRR11206993"
+Rscript 'scripts/Swamp/Full_SRR11206993.R' #run the scripts
+echo "SRR11206994"
+Rscript 'scripts/Swamp/Full_SRR11206994.R'
+echo "SRR11206995"
+Rscript 'scripts/Swamp/Full_SRR11206995.R'
+
+#OHara
+echo "SRR11206996"
+Rscript 'scripts/OHara/Full_SRR11206996.R'
+echo "SRR11206997"
+Rscript 'scripts/OHara/Full_SRR11206997.R'
+echo "SRR11206998"
+Rscript 'scripts/OHara/Full_SRR11206998.R'
+
+#Control
+echo "SRR11206999"
+Rscript 'scripts/Control/Full_SRR11206999.R'
+
+mv *fastq ./data/

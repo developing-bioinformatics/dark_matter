@@ -7,9 +7,10 @@ library(dplyr)
 library(stringr)
 
 
-function(srr,blasthits,amplicon_length=550){
+function(srr,blasthits,cutoff=5000,amplicon_length=550){
   #srr is an SRA accession number
   #blasthits is a BLAST result data frame
+  #cutoff is a number from 1 to maximum dusty score of srr. Default cutoff=5000 
   system(paste('fastq-dump', srr, sep=' ')) 
   dna = readFastq('.', pattern=srr)
 
@@ -57,14 +58,20 @@ function(srr,blasthits,amplicon_length=550){
   meanQscores_dustyHits = as.data.frame(meanQscores_dustyHits)
 
 
-  print('Clustering into high and low complexity populations')
-  clusterHits = kmeans(meanQscores_dustyHits,2)
-  meanQscores_dustyHits$cluster <- as.factor(clusterHits$cluster)
-  clusterCentersHits <- as.data.frame(clusterHits$centers,clusterHits$cluster)
+  print(paste('Grouping into high and low complexity populations with cutoff = ',cutoff,sep=""))
   
-  clusterNA = kmeans(meanQscores_dustyNA,2)
-  meanQscores_dustyNA$cluster <- as.factor((clusterNA$cluster+2))
-  clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
+
+  clusterHits <- as.numeric((meanQscores_dustyHits$Dusty >= cutoff)+1)
+  meanQscores_dustyHits$cluster <- as.factor(clusterHits)
+  #clusterCentersHits <- as.data.frame(clusterHits$centers,clusterHits$cluster)
+  clusterCentersHits <- as.data.frame(rbind(c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==1]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==1])),c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==2]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==2]))))
+  
+  #clusterNA = kmeans(meanQscores_dustyNA,2)
+  clusterNA <- as.numeric((meanQscores_dustyNA$Dusty < cutoff)+3)
+  meanQscores_dustyNA$cluster <- as.factor((clusterNA))
+  #clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
+  clusterCentersNA <- as.data.frame(rbind(c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==3]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==3])),c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==4]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==4]))))
+  
   
   #Overlayed plot
   print('Plotting all clusters')
@@ -83,16 +90,15 @@ function(srr,blasthits,amplicon_length=550){
                                 aes(x=meanQ,y=Dusty,color=as.factor(cluster))) +
                 #
                 geom_point(data=clusterCentersHits,
-                           aes(x=clusterCentersHits$meanQ,y=clusterCentersHits$Dusty,shape=as.factor(histcomb_hits_label),size=3)) +
+                           aes(x=clusterCentersHits$Q,y=clusterCentersHits$D,shape=as.factor(histcomb_hits_label),size=3)) +
                 geom_point(data=clusterCentersNA, 
-                           aes(x=clusterCentersNA$meanQ,y=clusterCentersNA$Dusty,shape=as.factor(histcomb_NA_label),size=3)) +
+                           aes(x=clusterCentersNA$Q,y=clusterCentersNA$D,shape=as.factor(histcomb_NA_label),size=3)) +
                 
                 scale_y_log10() +
                 xlab('Mean Q-Score (Nanopore)') +
                 ylab(expression("Dusty Complexity Score (log"[10]*")")) +
                 labs(color="Cluster",shape="Dataset") +
                 ggtitle(paste('Grouping of BLAST Results of a ', amplicon_length,' (bp) \n Amplicon by Complexity', sep='')) +
-                
                 guides(size=FALSE) +
                 theme_minimal())
   
@@ -100,6 +106,6 @@ function(srr,blasthits,amplicon_length=550){
 }
 
 #srr = c('SRR11206993') 
-#dusty_Q_plot <- dustyClustering(srr,cl)
+
 #dusty_Q_plot
 

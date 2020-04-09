@@ -14,35 +14,34 @@ library(cowplot)
 #devtools::install_github("tidyverse/multidplyr")
 #devtools::install_github("mhahsler/rBLAST")
 
-# Download SRA File:
-#srr=c('SRR11043481')
-#system(paste('fastq-dump', srr, sep=' '))
+#USER VARIABLES
+srr=c('SRR11206993') 
+cores = c(12)
+escore = c('1e-50')
+
+print(paste('Analyzing Accession code ',srr, sep=''))
+print(paste('Multicore processing on ',cores,' cores', sep=''))
+print('NCBI database')
+print(paste('BLAST threshold (E-score = ',escore,')' ,sep=''))
 
 
 # Read taxonomy database
 taxaNodes<-read.nodes.sql("/projectnb/ct-shbioinf/taxonomy/data/nodes.dmp")
 taxaNames<-read.names.sql("/projectnb/ct-shbioinf/taxonomy/data/names.dmp")
 
+#SRR repository: PRJNA605442
 
-# read fastq
-#dna = readFastq(paste(srr, '.fastq',sep=''))
-
-#read O'Hara SRRs:
-srr1=c('SRX7820009') #OH
-srr2=c('SRX7820008') #OH
-srr3=c('SRX7820007') #OH
 #load fastqs
-system(paste('fastq-dump', srr1, sep=' ')) 
-system(paste('fastq-dump', srr2, sep=' '))
-system(paste('fastq-dump', srr3, sep=' '))
+system(paste('fastq-dump', srr, sep=' ')) 
 #read fastqs
-dna1 = readFastq('./data/', pattern=srr1)
-dna2 = readFastq('./data/', pattern=srr2)
-dna3 = readFastq('./data/', pattern=srr3)
+dna = readFastq('.', pattern=srr)
 
-Full123 = c(dna1,dna2,dna3)
-dnaMerge <- do.call('append', Full123)
-remove(Full123)
+# todo: move files to data
+
+#Full123 = c(dna1,dna2,dna3)
+#dnaMerge <- do.call('append', Full123)
+#remove(Full123)
+dnaMerge = dna
 
 readMerge = sread(dnaMerge, id=id(dnaMerge))
 reads = sread(dnaMerge)
@@ -56,7 +55,8 @@ widths = as.data.frame(reads@ranges@width)
     xlab('Read Length (bp)') +
     xlim(0,2000) +
     ggtitle('Read length distribution for 550bp amplicon'))
-ggsave(widthplot, file='outputs/readlengths.png')
+out1 <- paste("outputs/Swamp/readlengths_",srr,".png", sep="")
+ggsave(widthplot, file=out1)
 
 # plot qscores
 numqscores = as(qscores, "matrix") # converts to numeric scores automatically
@@ -67,12 +67,23 @@ avgscores = as.data.frame(avgscores)
     theme_linedraw() +
     xlab('Quality Score') +
     ggtitle('Per Read Average Quality'))
-ggsave(qscores, file='outputs/quality.png')
+out2 <- paste("outputs/Swamp/quality_",srr,".png", sep="")
+ggsave(qscores, file=out2)
 
 
+## PLASTID DB
+## 1. make database
+#makeblastdb("./data/plastid.3.1.genomic.fna", dbtype = "nucl")
+
+## 3. open database
+#plastid_genomes_db <- blast("./data/plastid.3.1.genomic.fna")
+
+## 4. perform search (first sequence in the db should be a perfect match)
 ## blast
 bl <- blast(db="/projectnb/ct-shbioinf/blast/nt.fa")
-cl <- predict(bl, reads, BLAST_args = '-num_threads 12 -evalue 1e-100')
+print('Begin BLAST...')
+b_args <- paste('-num_threads ',cores,' -evalue ',escore, sep="")
+cl <- predict(bl, reads, BLAST_args = b_args)
 accid = as.character(cl$SubjectID) # accession IDs of BLAST hits
 
 # Plot results
@@ -111,7 +122,7 @@ lca2 = function(x) {
 
 blasthits = cltax
 
-cluster <- new_cluster(11)
+cluster <- new_cluster(cores)
 cluster_library(cluster, 'dplyr')
 cluster_copy(cluster, 'lca2')
 
@@ -177,41 +188,33 @@ famcount = prepare %>%
 
 gr = plot_grid(p1, p2, p3, ncol=1, nrow=3)
 
-ggsave(gr, file='outputs/grid_taxonomy.png', height = 9, width = 7, dpi=500)
+out3 <- paste("outputs/Swamp/grid_taxonomy_",srr,".png", sep="")
+ggsave(gr, file=out3, height = 9, width = 7, dpi=500)
+
+out6 <- paste("outputs/Swamp/save_",srr,".RData", sep="")
+save.image(file=out6, compress="gzip")
 
 ## Section 2
-print('Splitting into reads with and without genus hits')
+print('Splitting into reads with and without BLAST hits')
 
 HitsQID_group = cltax %>%
-  filter(!is.na(genus)) %>% # get rid of NA genera
-  group_by(QueryID) %>%#group
-  slice(1)
-  #summarize(count=n())
-
-NAQID_group = cltax %>%
-  filter(is.na(genus)) %>%
-  group_by(QueryID) %>%
-  slice(1)
-
-#NAHitsDiff = setdiff(HitsQID_group,NAQID_group)
-NAHitsDiff = setdiff(NAQID_group$QueryID,HitsQID_group$QueryID) #QueryIDs in NA_group that have no other matches
+  #filter(!is.na(genus)) %>% # get rid of NA genera
+  group_by(QueryID) 
 
 
-
-len = lengths(HitsQID_group)
-seq1 = seq(1:len[1])
-
-#make artificial list with length of HitsQID_group_S
+#extract read indices
 regexp <- "[[:digit:]]+"
-seq2 = str_extract(HitsQID_group[[1,]], regexp)
+idxHits = as.numeric(unique(str_extract(HitsQID_group$QueryID, regexp)))
+#idxNA = as.numeric(str_extract(NAHitsDiff, regexp))
 
-missingint = setdiff(seq1,seq2) #QueryIDs that have no matches
-missing = paste("Query_", sep="", missingint)
+idxNA = unique(setdiff((seq(1:length(dnaMerge))),idxHits))
+
+NA_reads = dnaMerge[idxNA]
 
 ############ Quality scores of Hits
 
-idxNA= missingint # indexes of reads that have no genus matches (script_main)
-idxHits = sort(as.integer(seq2)) # indexes of reads that have at least one genus match
+#idxNA= missingint # indexes of reads that have no genus matches (script_main)
+#idxHits = sort(as.integer(seq2)) # indexes of reads that have at least one genus match
 
 ##NA
 QscoresNA = quality(dnaMerge[idxNA]) # parse quality scores
@@ -223,7 +226,8 @@ remove(meanQscoresNA_temp)
 ##Hits
 QscoresHits = quality(dnaMerge[idxHits])
 numQscoresHits = as(QscoresHits, "matrix")
-meanQscoresHits_temp = rowMeans(numQscoresHits,na.rm=TRUE)
+#meanQscoresHits_temp = rowMeans(numQscoresHits,na.rm=TRUE)
+meanQscoresHits_temp = apply(numQscoresHits, 1, mean, na.rm=TRUE) #apply the function mean() across 
 meanQscoresHits = as.data.frame(meanQscoresHits_temp,col.names=c('QmeansHits'))
 remove(meanQscoresHits_temp)
 
@@ -250,12 +254,12 @@ remove(meanQscoresHits_temp)
 
 print('Plotting Qscores')
 histcomb1 = (ggplot(meanQscoresHits) +
-  geom_histogram(data = meanQscoresHits,aes(x=meanQscoresHits$meanQscoresHits_temp, color="Genus Hits"),
+  geom_histogram(data = meanQscoresHits,aes(x=meanQscoresHits$meanQscoresHits_temp, color="BLAST Hits"),
                  bins = 100, 
                  fill="pink",
                  position="dodge"
   ) +
-  geom_histogram(data = meanQscoresNA, aes(x=meanQscoresNA$meanQscoresNA_temp, color="No Genus Hits"),
+  geom_histogram(data = meanQscoresNA, aes(x=meanQscoresNA$meanQscoresNA_temp, color="No BLAST Hits"),
                  bins = 100, 
                  fill="lightblue",
                  position="dodge", 
@@ -306,16 +310,23 @@ clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
 #Overlayed plot
 print('Plotting all clusters')
 
+histcomb3_hits_label  <- paste("BLAST Hits (",length(idxHits),")", sep="")
+histcomb3_NA_label  <- paste("No BLAST Hits (",length(idxNA),")", sep="")
 histcomb3 = (ggplot(meanQscores_dustyNA) + 
-  stat_density_2d(data=meanQscores_dustyNA,
-                  aes(x=meanQ,y=Dusty,color=as.factor(cluster))) +
-  geom_point(data=clusterCentersNA, 
-             aes(x=clusterCentersNA$meanQ,y=clusterCentersNA$Dusty,shape=as.factor("No Genus Hits"),size=3)) +
-  #
   stat_density_2d(data=meanQscores_dustyHits,
                   aes(x=meanQ,y=Dusty,color=as.factor(cluster))) +
+  #geom_point(data=meanQscores_dustyHits,
+                  #aes(x=meanQ,y=Dusty,color=as.factor(cluster)),size=0.5) +
   geom_point(data=clusterCentersHits,
-             aes(x=clusterCentersHits$meanQ,y=clusterCentersHits$Dusty,shape=as.factor("Genus Hits"),size=3)) +
+             aes(x=clusterCentersHits$meanQ,y=clusterCentersHits$Dusty,shape=as.factor(histcomb3_hits_label),size=3)) +
+    #
+    stat_density_2d(data=meanQscores_dustyNA,
+                    aes(x=meanQ,y=Dusty,color=as.factor(cluster))) +
+    #geom_point(data=meanQscores_dustyNA,
+               #aes(x=meanQ,y=Dusty,color=as.factor(cluster)),size=0.5) +
+    geom_point(data=clusterCentersNA, 
+               aes(x=clusterCentersNA$meanQ,y=clusterCentersNA$Dusty,shape=as.factor(histcomb3_NA_label),size=3)) +
+    
   scale_y_log10() +
   labs(color="Cluster",shape="Dataset") +
   guides(size=FALSE) +
@@ -324,10 +335,13 @@ histcomb3 = (ggplot(meanQscores_dustyNA) +
 
 gr2 = plot_grid(histcomb1, histcomb2, ncol=1, nrow=2)
 
-ggsave(gr2, file='outputs/grid_q_dusty.png', height = 9, width = 7, dpi=500)
+out4 <- paste("outputs/Swamp/grid_Qmean_Dusty_",srr,".png", sep="")
+ggsave(gr2, file=out4, height = 9, width = 7, dpi=500)
 
-ggsave(histcomb3, file='outputs/q_dusty_clusters.png', height = 9, width = 7, dpi=500)
+out5 <- paste("outputs/Swamp/clusters_Qmean_Dusty_",srr,".png", sep="")
+ggsave(histcomb3, file=out5, height = 9, width = 7, dpi=500)
 
+out6 <- paste("outputs/Swamp/save_",srr,".RData", sep="")
+save.image(file=out6, compress="gzip")
 
-save.image(file='outputs/save.RData',compress="gzip")
 

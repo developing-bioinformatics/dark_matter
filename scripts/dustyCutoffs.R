@@ -7,22 +7,27 @@ library(dplyr)
 library(stringr)
 options(scipen=999, digits=1) 
 
-function(srr,blasthits,cutoff=5000,amplicon_length=550){
+function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE, verbose=TRUE){
   #srr is an SRA accession number
   #blasthits is a BLAST result data frame
   #cutoff is a number from 1 to maximum dusty score of srr. 
   #Default cutoff=5000 
   #If cutoff is NULL, kmeans clustering is used
+  #If data = TRUE, a data frame with quality scores, complexity scores and cluster ids with length of dna.
+  #If data = FALSE, the function returns a ggplot object.
   
   system(paste('fastq-dump', srr, sep=' ')) 
   dna = readFastq('.', pattern=srr)
+  if (verbose==TRUE){
+    cat('Extracting metadata\n')
+  }
   
-  cat('Extracting metadata\n')
   reads = sread(dna)
   qscores = quality(dna) 
   escore = max(cl$E)
-  cat('Splitting into reads with and without BLAST hits\n')
-
+  if (verbose==TRUE){
+    cat('Splitting into reads with and without BLAST hits\n')
+  }
   #extract read indices
   regexp <- "[[:digit:]]+"
   idxHits = as.numeric(unique(str_extract(blasthits$QueryID, regexp)))
@@ -30,7 +35,9 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   NA_reads = dna[idxNA]
 
 ############ Quality scores of Hits
-  cat('Calculating quality scores for each read\n')
+  if (verbose==TRUE){
+    cat('Calculating quality scores for each read\n')
+  }
 ##NA
   QscoresNA = quality(dna[idxNA]) # parse quality scores
   numQscoresNA = as(QscoresNA, "matrix") # converts to numeric scores automatically
@@ -45,7 +52,9 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   meanQscoresHits = as.data.frame(meanQscoresHits_temp,col.names=c('QmeansHits'))
   remove(meanQscoresHits_temp)
   
-  cat('Calculating dusty scores for each read\n')
+  if (verbose==TRUE){
+    cat('Calculating dusty scores for each read\n')
+  }
   complexNA = dustyScore(dna[idxNA])
   complexNA = as.data.frame(complexNA)
   meanQscores_dustyNA = cbind(meanQ=(meanQscoresNA$meanQscoresNA_temp),Dusty=(complexNA$complexNA))
@@ -57,7 +66,9 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   meanQscores_dustyHits = as.data.frame(meanQscores_dustyHits)
 
   if (is.null(cutoff)) { #cluster if cutoff=NULL
-  cat('K-means clustering into high and low complexity populations\n')
+    if (verbose==TRUE){
+      cat('K-means clustering into high and low complexity populations\n')
+    }
   clusterHits = kmeans(meanQscores_dustyHits,2)
   meanQscores_dustyHits$cluster <- as.factor(clusterHits$cluster)
   clusterCentersHits <- as.data.frame(clusterHits$centers,clusterHits$cluster)
@@ -66,7 +77,9 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   meanQscores_dustyNA$cluster <- as.factor((clusterNA$cluster+2))
   clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
   } else {
-  cat(paste('Grouping into high and low complexity populations with cutoff = ',cutoff,"\n",sep=""))
+    if (verbose==TRUE){
+      cat(paste('Grouping into high and low complexity populations with cutoff = ',cutoff,"\n",sep=""))
+    }
   clusterHits <- as.numeric((meanQscores_dustyHits$Dusty < cutoff)+1)
   meanQscores_dustyHits$cluster <- as.factor(clusterHits)
   clusterCentersHits <- as.data.frame(rbind(c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==1]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==1])),c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==2]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==2]))))
@@ -78,8 +91,9 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
 
   
   #Overlayed plot
-  cat('Plotting all clusters\n')
-  
+  if (verbose==TRUE){
+    cat('Building plot of all clusters\n')
+  }
   histcomb_hits_label  <- paste("BLAST Hits (",length(idxHits),")", sep="")
   histcomb_NA_label  <- paste("No BLAST Hits (",length(idxNA),")", sep="")
   histcomb = (ggplot(meanQscores_dustyNA) + 
@@ -105,8 +119,29 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
                 ggtitle(paste('Grouping of BLAST Results of a ', amplicon_length,' (bp) \n Amplicon by Complexity', sep='')) +
                 guides(size=FALSE) +
                 theme_minimal())
-  
-  return(histcomb)
+  if (data==FALSE) {
+    if (verbose==TRUE){
+      cat('Returning ggplot object\n')
+    }
+    return(histcomb)
+  }
+  if (data==TRUE) {
+    histcomb #print ggplot
+    #rearrange new data frame to output all calculated values
+    obj_out = setNames(data.frame(matrix(ncol=3,nrow=length(dna))),c("meanQ","Dusty","cluster"))
+    obj_out[,] = as.numeric(0)
+
+    obj_out$meanQ[idxHits] <- meanQscores_dustyHits$meanQ
+    obj_out$Dusty[idxHits] <- meanQscores_dustyHits$Dusty
+    obj_out$cluster[idxHits] <- as.numeric_version(meanQscores_dustyHits$cluster)
+    obj_out$meanQ[idxNA] <- meanQscores_dustyNA$meanQ
+    obj_out$Dusty[idxNA] <- meanQscores_dustyNA$Dusty
+    obj_out$cluster[idxNA] <- as.numeric_version(meanQscores_dustyNA$cluster)
+    if (verbose==TRUE){
+      cat('Returning data frame\n')
+    }
+    return(obj_out)
+  }
 }
 
 

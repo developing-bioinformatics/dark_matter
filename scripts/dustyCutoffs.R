@@ -10,7 +10,9 @@ library(stringr)
 function(srr,blasthits,cutoff=5000,amplicon_length=550){
   #srr is an SRA accession number
   #blasthits is a BLAST result data frame
-  #cutoff is a number from 1 to maximum dusty score of srr. Default cutoff=5000 
+  #cutoff is a number from 1 to maximum dusty score of srr. 
+  #Default cutoff=5000 
+  #If cutoff is NULL, kmeans clustering is used
   
   system(paste('fastq-dump', srr, sep=' ')) 
   dna = readFastq('.', pattern=srr)
@@ -54,7 +56,16 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   meanQscores_dustyHits = cbind(meanQ=(meanQscoresHits$meanQscoresHits_temp),Dusty=(complexHits$complexHits))
   meanQscores_dustyHits = as.data.frame(meanQscores_dustyHits)
 
+  if (is.null(cutoff)) { #cluster if cutoff=
+  cat('K-means clustering into high and low complexity populations\n')
+  clusterHits = kmeans(meanQscores_dustyHits,2)
+  meanQscores_dustyHits$cluster <- as.factor(clusterHits$cluster)
+  clusterCentersHits <- as.data.frame(clusterHits$centers,clusterHits$cluster)
 
+  clusterNA = kmeans(meanQscores_dustyNA,2)
+  meanQscores_dustyNA$cluster <- as.factor((clusterNA$cluster+2))
+  clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
+  } else {
   cat(paste('Grouping into high and low complexity populations with cutoff = ',cutoff,"\n",sep=""))
   clusterHits <- as.numeric((meanQscores_dustyHits$Dusty < cutoff)+1)
   meanQscores_dustyHits$cluster <- as.factor(clusterHits)
@@ -63,16 +74,8 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   clusterNA <- as.numeric((meanQscores_dustyNA$Dusty < cutoff)+3)
   meanQscores_dustyNA$cluster <- as.factor((clusterNA))
   clusterCentersNA <- as.data.frame(rbind(c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==3]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==3])),c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==4]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==4]))))
-  
-  #Archived kmeans code:
-  # print('Clustering into high and low complexity populations')
-  # clusterHits = kmeans(meanQscores_dustyHits,2)
-  # meanQscores_dustyHits$cluster <- as.factor(clusterHits$cluster)
-  # clusterCentersHits <- as.data.frame(clusterHits$centers,clusterHits$cluster)
-  # 
-  # clusterNA = kmeans(meanQscores_dustyNA,2)
-  # meanQscores_dustyNA$cluster <- as.factor((clusterNA$cluster+2))
-  # clusterCentersNA <- as.data.frame(clusterNA$centers,clusterNA$cluster)
+  }
+
   
   #Overlayed plot
   cat('Plotting all clusters\n')

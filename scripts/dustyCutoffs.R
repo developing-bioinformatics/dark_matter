@@ -5,7 +5,7 @@ library(ggplot2)
 library(ShortRead)
 library(dplyr)
 library(stringr)
-
+options(scipen=999, digits=1) 
 
 function(srr,blasthits,cutoff=5000,amplicon_length=550){
   #srr is an SRA accession number
@@ -56,7 +56,7 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
   meanQscores_dustyHits = cbind(meanQ=(meanQscoresHits$meanQscoresHits_temp),Dusty=(complexHits$complexHits))
   meanQscores_dustyHits = as.data.frame(meanQscores_dustyHits)
 
-  if (is.null(cutoff)) { #cluster if cutoff=
+  if (is.null(cutoff)) { #cluster if cutoff=NULL
   cat('K-means clustering into high and low complexity populations\n')
   clusterHits = kmeans(meanQscores_dustyHits,2)
   meanQscores_dustyHits$cluster <- as.factor(clusterHits$cluster)
@@ -101,7 +101,7 @@ function(srr,blasthits,cutoff=5000,amplicon_length=550){
                 scale_y_log10() +
                 xlab('Mean Q-Score (Nanopore)') +
                 ylab(expression("Dusty Complexity Score (log"[10]*")")) +
-                labs(color="Cluster",shape=paste("Dataset (E-score = ",escore,")",sep="")) +
+                labs(color="Cluster",shape=paste("Dataset\n(E-score = ",format(escore,scientific=T),")",sep="")) +
                 ggtitle(paste('Grouping of BLAST Results of a ', amplicon_length,' (bp) \n Amplicon by Complexity', sep='')) +
                 guides(size=FALSE) +
                 theme_minimal())

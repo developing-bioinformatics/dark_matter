@@ -26,7 +26,7 @@ function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE,mark_size=
     download.file(SRAfile[1], paste(srr,'.fastq',sep=""))
   }
   
-  dna = readFastq('.', pattern=srr)
+  dna = readFastq('data/', pattern=srr)
   if (verbose==TRUE){
     cat('Extracting metadata\n')
   }

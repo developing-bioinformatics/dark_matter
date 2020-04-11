@@ -8,7 +8,7 @@ library(dplyr)
 library(stringr)
 options(scipen=999, digits=1) 
 
-function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE, verbose=TRUE){
+function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE,mark_size=3, verbose=TRUE){
   #srr is an SRA accession number (string)
   #blasthits is a BLAST result data frame (before or after taxonomizr)
   #cutoff is a number from 1 to maximum dusty score of srr. 
@@ -17,7 +17,7 @@ function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE, verbose=T
   #If data = TRUE, the function returns a data frame with quality scores, complexity scores and cluster ids with length of dna .
   #If data = FALSE, the function returns a ggplot object.
   
-  if (file.exists(paste(srr,'.fastq',sep=''))==FALSE) {
+  if (file.exists(paste('data/',srr,'.fastq',sep=''))==FALSE) {
     #system(paste('fastq-dump', srr, sep=' '))
     SRAfile <- read_xml(entrez_fetch(db="sra",id=srr,rettype='xml')) %>%
       xml_find_all("//RUN_SET") %>% 
@@ -95,11 +95,11 @@ function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE, verbose=T
     }
     clusterHits <- as.numeric((meanQscores_dustyHits$Dusty < cutoff)+1)
     meanQscores_dustyHits$cluster <- as.factor(clusterHits)
-    clusterCentersHits <- as.data.frame(rbind(c(meanQ=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==1]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==1])),c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==2]), D=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==2]))))
+    clusterCentersHits <- as.data.frame(rbind(c(meanQ=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==1]), Dusty=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==1])),c(Q=mean(meanQscores_dustyHits$meanQ[meanQscores_dustyHits$cluster==2]), Dusty=mean(meanQscores_dustyHits$Dusty[meanQscores_dustyHits$cluster==2]))))
   
     clusterNA <- as.numeric((meanQscores_dustyNA$Dusty < cutoff)+3)
     meanQscores_dustyNA$cluster <- as.factor((clusterNA))
-    clusterCentersNA <- as.data.frame(rbind(c(meanQ=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==3]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==3])),c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==4]), D=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==4]))))
+    clusterCentersNA <- as.data.frame(rbind(c(meanQ=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==3]), Dusty=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==3])),c(Q=mean(meanQscores_dustyNA$meanQ[meanQscores_dustyNA$cluster==4]), Dusty=mean(meanQscores_dustyNA$Dusty[meanQscores_dustyNA$cluster==4]))))
   }
 
   #Overlayed plot
@@ -121,9 +121,9 @@ function(srr, blasthits, cutoff=5000, amplicon_length=550, data=FALSE, verbose=T
                                 aes(x=meanQ,y=Dusty,color=as.factor(cluster))) +
                 #
                 geom_point(data=clusterCentersHits,
-                           aes(x=clusterCentersHits$meanQ,y=clusterCentersHits$D,shape=as.factor(histcomb_hits_label),size=3)) +
+                           aes(x=meanQ,y=Dusty,shape=as.factor(histcomb_hits_label),size=mark_size)) +
                 geom_point(data=clusterCentersNA, 
-                           aes(x=clusterCentersNA$meanQ,y=clusterCentersNA$D,shape=as.factor(histcomb_NA_label),size=3)) +
+                           aes(x=meanQ,y=Dusty,shape=as.factor(histcomb_NA_label),size=mark_size)) +
                 
                 scale_y_log10() +
                 xlab('Mean Q-Score (Nanopore)') +

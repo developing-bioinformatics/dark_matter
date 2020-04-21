@@ -1,0 +1,54 @@
+#!/bin/bash -l
+#
+#Number of cores requested
+#$ -pe omp 16
+
+#Give the name to the job
+#$ -N dark_matter
+
+#Output file destination
+#$ -o outputs/$JOB_NAME.o$JOB_ID
+
+#Send an email when the job is finished (or aborted)
+#$ -M enpederson@gmail.com
+#$ -m ae
+
+
+#Join the error and output file
+#$ -j y
+
+
+# Set the runtime limit (default 16 hours):
+#$ -l h_rt=12:00:00
+
+# Specify your project
+#$ -P ct-shbioinf
+
+
+# Stuff to execute: 
+
+module load blast+ #load blast module
+#module load sratoolkit
+module load R/3.6.2 #load R3.6.2
+
+cd /projectnb/ct-shbioinf/epederso/dark_matter/ #use your notes or project folder. Wherever your script is located
+
+#srr_list = ("SRR11043467","SRR11043468","SRR11043469","SRR11043470","SRR11043471", 
+#             "SRR11043472","SRR11043473","SRR11043474","SRR11043475","SRR11043476",
+#             "SRR11043477","SRR11043478","SRR11043479","SRR11043480","SRR11043481",
+#             "SRR11043482","SRR11043483","SRR11043484","SRR11043486","SRR11043487",
+#             "SRR11043488","SRR11043489","SRR11043490","SRR11043491","SRR11043493",
+#             "SRR11043494","SRR11043495","SRR11043496","SRR11043497","SRR11043498",
+#             "SRR11043499","SRR11043500","SRR11043501","SRR11043502","SRR11043503",
+#             "SRR11043504","SRR11043505","SRR11043506","SRR11043507","SRR11043508",
+#             "SRR11043509","SRR11043510","SRR11043511","SRR11043512","SRR11043513",
+#             "SRR11043514","SRR11043515","SRR11043516","SRR11043517","SRR11043492",
+#             "SRR11206993","SRR11206994","SRR11206995","SRR11206996","SRR11206997",
+#             "SRR11206998","SRR11206999","SRR11043485")
+
+echo "SRR11043496"
+
+Rscript 'code/run_dark_matter_PBS.R' #run the scripts
+
+
+

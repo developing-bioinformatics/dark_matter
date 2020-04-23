@@ -9,7 +9,9 @@ library(Biostrings)
 library(taxonomizr)
 library(DECIPHER)
 library(dendextend)
-
+library(ggdendro)
+library(circlize)
+#library(ape)
 
 setwd('/projectnb/ct-shbioinf/epederso/dark_matter/')
 rBLAST_pre <- dget('code/rBLAST_pre.R') # run BLAST
@@ -40,7 +42,7 @@ srr_list = c("SRR11043467","SRR11043468","SRR11043469","SRR11043470","SRR1104347
 cores = c(16)
 escore = c('1e-10')
 p = proc.time()
-idx_srr = 28
+idx_srr = 9
 srr = srr_list[idx_srr]
 #dna = readFastq('./data/', pattern=srr_list[idx_srr])
 #reads = sread(dna)
@@ -61,14 +63,15 @@ cutoff_plot <- dustyCutoffs(srr_list[idx_srr],
                             cutoff=3000,
                             data=FALSE,
                             verbose=TRUE)
-#cutoff_plot #plot the object
-
-clusterMax <- get_clusters(srr_list[idx_srr], cutoff_df, cluster_cutoff=0.01, complexity="high", escore, cores)
+cutoff_plot #plot the object
+try({
+  clusterMax <- get_clusters(srr_list[idx_srr], cutoff_df, cluster_cutoff=0.01, complexity="high", escore, cores)
+  },silent=TRUE)
 
 #Maximize number of subtrees with tryCatch loop. Returns highest possible number of subclusters.
 num_reads <-length(cutoff_df$cluster)
 #subtrees <- as.integer(num_reads/450)
-subtrees <- 30
+subtrees <- 400
 cycles <- (subtrees+seq(1:num_reads))
 i <- subtrees
 tryCatch(
@@ -93,8 +96,7 @@ tryCatch(
   finally = {
     optSubtrees <- i-1
     dend_list <- cluster_split(clusterMax,optSubtrees)
-    try({
-      consensus_seqs <- get_consensus(srr=srr_list[idx_srr],
+    consensus_seqs <- get_consensus(srr=srr_list[idx_srr],
                                       dend_list,
                                       subtrees=optSubtrees, 
                                       cluster_cutoff=0.01, 
@@ -103,31 +105,173 @@ tryCatch(
                                       consensus_min=0.5,
                                       complexity="high",
                                       cores=cores)
-    }, silent = TRUE)
-    
   }
 )
 
-
 BrowseSeqs(consensus_seqs) #visual inspection
-
+ 
 consensus_tax_high <- consensus_taxa(consensus_seqs, escore, cores)
-
+ 
 #unique(consensus_tax_high$QueryID)
 
-recovered <- fracIdentity(consensus_tax_high, cutoff_df, dend_list, group=3)
+recovered <- fracIdentity(consensus_tax_high, cutoff_df, dend_list, group=4)
 
 # save cluster plot
 out1 <- paste("outputs/dusty_clusters_",srr,".png", sep="")
 ggsave(cutoff_plot, file=out1, height = 9, width = 7, dpi=500)
 
-proc.time() - p
+#proc.time() - p
 
 # save data image
-save.image(paste('outputs/save',srr_list[idx_srr],'_consensus.RData',sep=''))
+save.image(paste('outputs/save',srr_list[idx_srr],'_consensus_HIGHCOMPLEXITY.RData',sep=''))
 
 # write FASTA of consensus sequences
-writeFasta(consensus_seqs,paste('outputs/consensus',srr_list[idx_srr],'.fa',sep=''))
+writeFasta(consensus_seqs,paste('outputs/consensus',srr_list[idx_srr],'_HIGHCOMPLEXITY.fa',sep=''))
 
 
+mean(cutoff_df$Dusty[cutoff_df$cluster==1])
+sd(cutoff_df$Dusty[cutoff_df$cluster==1])
+length(cutoff_df$Dusty[cutoff_df$cluster==1])
+
+mean(cutoff_df$Dusty[cutoff_df$cluster==3])
+sd(cutoff_df$Dusty[cutoff_df$cluster==3])
+length(cutoff_df$Dusty[cutoff_df$cluster==3])
+
+mean(cutoff_df$Dusty[cutoff_df$cluster==2])
+sd(cutoff_df$Dusty[cutoff_df$cluster==2])
+length(cutoff_df$Dusty[cutoff_df$cluster==2])
+
+mean(cutoff_df$Dusty[cutoff_df$cluster==4])
+sd(cutoff_df$Dusty[cutoff_df$cluster==4])
+length(cutoff_df$Dusty[cutoff_df$cluster==4])
+
+mean(cutoff_df$meanQ[cutoff_df$cluster==1])
+sd(cutoff_df$meanQ[cutoff_df$cluster==1])
+length(cutoff_df$meanQ[cutoff_df$cluster==1])
+
+mean(cutoff_df$meanQ[cutoff_df$cluster==3])
+sd(cutoff_df$meanQ[cutoff_df$cluster==3])
+length(cutoff_df$meanQ[cutoff_df$cluster==3])
+
+mean(cutoff_df$meanQ[cutoff_df$cluster==2])
+sd(cutoff_df$meanQ[cutoff_df$cluster==2])
+length(cutoff_df$meanQ[cutoff_df$cluster==2])
+
+mean(cutoff_df$meanQ[cutoff_df$cluster==4])
+sd(cutoff_df$meanQ[cutoff_df$cluster==4])
+length(cutoff_df$meanQ[cutoff_df$cluster==4])
+
+##### dendrograms
+
+
+
+lca = function(x) {
+  require(dplyr)
+  taxnames = c('superkingdom', 'phylum', 'order', 'family', 'genus', 'species')
+  shortnames = apply(x[,taxnames], 2, unique)
+  countshnames = sapply(shortnames, length)
+  lastuni = tail(names(countshnames[countshnames==1]), n=1)
+  nombre = as.data.frame(x[1,which(colnames(x) == lastuni)])
+  ret = x %>% 
+    mutate(last_common = as.character(nombre[[1]])) %>%
+    mutate(level_lca = lastuni)
+  return(ret)
+}
+
+regexp <- "[[:digit:]]+"
+allhits = consensus_tax_high %>%
+  group_by(QueryID) %>%
+  group_modify(~ lca(.x)) %>%
+  slice(1) %>% #keep only first row in each group (one per read)
+  summarize(last_common) 
+
+taxa_idx = as.numeric(str_extract(allhits$QueryID, regexp))
+taxa_labels = allhits$last_common
+taxa <- data.frame()
+taxa <- cbind(taxa_idx,taxa_labels)
+unique(allhits$last_common)
+
+idx_dend = as.numeric(unique(str_extract(consensus_tax_high$QueryID, regexp))) %>% sort()
+color_vec <- matrix(1,optSubtrees,1)
+color_vec <- as.numeric(color_vec)
+n= length(taxa_idx)
+for (i in seq_len(n)){
+  if (taxa[n+i] =="Streptophyta"){
+    color_vec[as.numeric(taxa[i])] = 2
+  } else if (taxa[n+i]=="Sapindaceae"){
+    color_vec[as.numeric(taxa[i])] = 3
+  } else if (taxa[n+i]=="Sapindales"){
+    color_vec[as.numeric(taxa[i])] = 4
+  }
+}
+
+
+
+circos.par(cell.padding = c(0, 0, 0, 0))
+labels <- as.numeric(clusterMax %>% 
+                       labels)
+m = length(labels)
+circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
+dend = color_branches(clusterMax, k = optSubtrees, col = color_vec)
+dend_height = attr(dend, "height")
+circos.track(ylim = c(0, dend_height), bg.border = NA, 
+             track.height = 0.4, panel.fun = function(x, y) {
+               circos.dendrogram(dend)
+             })
+title(main='Low Complexity Dark Matter')
+legend(x=-0.3, y=0.25, legend=c('Streptophyta','Sapindaceae','Sapindales','No BLAST Hits'), bty='n', text.col=c('red','green','blue','black'), cex=0.9)
+circos.clear()
+
+# circos.track(ylim = c(0, 1), bg.border = NA, track.height = 0.3, 
+#              panel.fun = function(x, y) {
+#                for(i in seq(1:970)) {
+#                  circos.text(i-0.5, 0, labels_vec[i], adj = c(0, 0.5), 
+#                              facing = "clockwise", niceFacing = TRUE,
+#                              col = 2, cex = 0.5)
+#                }
+#              })
+
+allhits = consensus_tax_high %>%
+  group_by(QueryID) %>%
+  group_modify(~ lca(.x)) %>%
+  slice(1) %>% #keep only first row in each group (one per read)
+  summarize(last_common) 
+
+taxa_idx = as.numeric(str_extract(allhits$QueryID, regexp))
+taxa_labels = allhits$last_common
+taxa <- data.frame()
+taxa <- cbind(taxa_idx,taxa_labels)
+unique(allhits$last_common)
+
+idx_dend = as.numeric(unique(str_extract(consensus_tax_high$QueryID, regexp))) %>% sort()
+color_vec <- matrix(1,optSubtrees,1)
+color_vec <- as.numeric(color_vec)
+n= length(taxa_idx)
+for (i in seq_len(n)){
+  if (taxa[n+i] =="Streptophyta"){
+    color_vec[as.numeric(taxa[i])] = 2
+  } else if (taxa[n+i]=="Sapindaceae"){
+    color_vec[as.numeric(taxa[i])] = 3
+  } else if (taxa[n+i]=="Burseraceae"){
+    color_vec[as.numeric(taxa[i])] = 4
+  }
+}
+
+
+
+circos.par(cell.padding = c(0, 0, 0, 0))
+labels <- as.numeric(clusterMax %>% 
+                       labels)
+m = length(labels)
+circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
+
+dend = color_branches(clusterMax, k = optSubtrees, col = color_vec)
+dend_height = attr(dend, "height")
+circos.track(ylim = c(0, dend_height), bg.border = NA, 
+             track.height = 0.4, panel.fun = function(x, y) {
+               circos.dendrogram(dend)
+             })
+title(main='High Complexity Dark Matter')
+legend(x=-0.3, y=0.25, legend=c('Streptophyta','Sapindaceae','Burseraceae','No BLAST Hits'), bty='n', text.col=c('red','green','blue','black'), cex=0.8)
+circos.clear()
 

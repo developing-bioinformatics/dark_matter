@@ -25,9 +25,9 @@ function(srr, dend_list, subtrees=50, cluster_cutoff=0.01, stag_threshold=5,cons
   
   dna = readFastq(paste('data/',srr,'.fastq',sep=''))
   if (complexity=="high"){
-    cluster_sreads = sread(dna[cutoff_df$cluster==3])
-  } else if (complexity=="low") {
     cluster_sreads = sread(dna[cutoff_df$cluster==4])
+  } else if (complexity=="low") {
+    cluster_sreads = sread(dna[cutoff_df$cluster==3])
   } else if (complexity=="all") {
     cluster_sreads = sread(dna[cutoff_df$cluster==3|cutoff_df$cluster==4])
   }
@@ -41,7 +41,7 @@ function(srr, dend_list, subtrees=50, cluster_cutoff=0.01, stag_threshold=5,cons
   
   
   for (i in seq(1:subtrees)) {
-    cat(paste('Subcluster ',i,sep=''))
+    cat(paste('Subcluster ',i,'\n',sep=''))
     idx_test <- as.numeric(dend_list[[i]] %>% 
                              labels)
     dend_seqs_df <- cluster_sreads[idx_test]

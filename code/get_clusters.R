@@ -33,9 +33,9 @@ function(srr, cutoff_df, complexity="high", cluster_cutoff, escore=1e-10, cores=
   
   dna = readFastq(paste('data/',srr,'.fastq',sep=''))
   if (complexity=="high"){
-    cluster_sreads = sread(dna[cutoff_df$cluster==3])
-  } else if (complexity=="low") {
     cluster_sreads = sread(dna[cutoff_df$cluster==4])
+  } else if (complexity=="low") {
+    cluster_sreads = sread(dna[cutoff_df$cluster==3])
   } else if (complexity=="all") {
     cluster_sreads = sread(dna[cutoff_df$cluster==3|cutoff_df$cluster==4])
   }

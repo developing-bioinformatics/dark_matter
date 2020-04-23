@@ -2,7 +2,7 @@
 library(dplyr)
 library(stringr)
 
-function(consensus_tax, cutoff_df, dend_list, group=3) {
+function(consensus_tax, cutoff_df, dend_list, group=4) {
   regexp <- "[[:digit:]]+"
   idx_dend = as.numeric(unique(str_extract(consensus_tax$QueryID, regexp)))
   

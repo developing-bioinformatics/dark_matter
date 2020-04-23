@@ -19,7 +19,7 @@
 
 
 # Set the runtime limit (default 16 hours):
-#$ -l h_rt=12:00:00
+#$ -l h_rt=18:00:00
 
 # Specify your project
 #$ -P ct-shbioinf

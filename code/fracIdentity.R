@@ -2,7 +2,14 @@
 library(dplyr)
 library(stringr)
 
-function(consensus_tax, cutoff_df, dend_list, group=4) {
+function(consensus_tax, cutoff_df, dend_list, complexity='high') {
+  if (complexity=="high"){
+    group = 4
+  } else if (complexity=="low") {
+    group=3
+  } else if (complexity=="all") {
+    group=c(3,4)
+  }
   regexp <- "[[:digit:]]+"
   idx_dend = as.numeric(unique(str_extract(consensus_tax$QueryID, regexp)))
   
@@ -11,7 +18,7 @@ function(consensus_tax, cutoff_df, dend_list, group=4) {
     blast_labels <- c(blast_labels, as.numeric(dend_list[[idx_dend[i]]] %>% labels))
   }
   
-  high_complexity_count <- cutoff_df %>% count(cluster==group)
-  recovered = length(blast_labels)/high_complexity_count$n[[2]]
+  complexity_count <- cutoff_df %>% count(cluster==group)
+  recovered = length(blast_labels)/complexity_count$n[[2]]
   return(recovered)
 }

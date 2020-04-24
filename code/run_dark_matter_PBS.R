@@ -11,7 +11,7 @@ library(DECIPHER)
 library(dendextend)
 library(ggdendro)
 library(circlize)
-#library(ape)
+
 
 setwd('/projectnb/ct-shbioinf/epederso/dark_matter/')
 rBLAST_pre <- dget('code/rBLAST_pre.R') # run BLAST
@@ -22,7 +22,7 @@ cluster_split <- dget('code/cluster_split.R') # split clusters based on the opti
 get_consensus <- dget('code/get_consensus.R') # align sequences based on each subtrees to get consensus sequences
 consensus_taxa <- dget('code/consensus_taxa.R') # BLAST consensus sequences and identify taxa
 fracIdentity <- dget('code/fracIdentity.R') # calculate the fraction of high-complexity reads that are now represented by BLAST hits
-
+lca_core <- dget('code/lca_core.R') # for coloring dendrograms
 
               #1            #2            #3          #4              #5
 srr_list = c("SRR11043467","SRR11043468","SRR11043469","SRR11043470","SRR11043471", 
@@ -114,7 +114,7 @@ consensus_tax_high <- consensus_taxa(consensus_seqs, escore, cores)
  
 #unique(consensus_tax_high$QueryID)
 
-recovered <- fracIdentity(consensus_tax_high, cutoff_df, dend_list, group=4)
+recovered <- fracIdentity(consensus_tax_high, cutoff_df, dend_list, complexity='high')
 
 # save cluster plot
 out1 <- paste("outputs/dusty_clusters_",srr,".png", sep="")
@@ -163,54 +163,18 @@ length(cutoff_df$meanQ[cutoff_df$cluster==4])
 
 ##### dendrograms
 
-lca = function(x) {
-  require(dplyr)
-  taxnames = c('superkingdom', 'phylum', 'order', 'family', 'genus', 'species')
-  shortnames = apply(x[,taxnames], 2, unique)
-  countshnames = sapply(shortnames, length)
-  lastuni = tail(names(countshnames[countshnames==1]), n=1)
-  nombre = as.data.frame(x[1,which(colnames(x) == lastuni)])
-  ret = x %>% 
-    mutate(last_common = as.character(nombre[[1]])) %>%
-    mutate(level_lca = lastuni)
-  return(ret)
-}
-
-lca2 = function(x) {
-  require(dplyr)
-  taxnames = c('superkingdom', 'phylum', 'order', 'family', 'genus', 'species')
-  shortnames = apply(x[,taxnames], 2, unique)
-  countshnames = sapply(shortnames, length)
-  numcount = countshnames==1
-  lastuni = tail(names(shortnames[numcount==TRUE]), n=1)
-  nombre = as.data.frame(x[1,which(colnames(x) == lastuni)])
-  newtax <- as.list(ifelse(countshnames==1,shortnames,NA))
-  
-  ret = x %>% 
-    mutate(last_common = as.character(nombre[[1]])) %>%
-    mutate(level_lca = lastuni) %>%
-    mutate(superkingdom = newtax$superkingdom) %>%
-    mutate(phylum = newtax$phylum) %>%
-    mutate(class = newtax$class) %>%
-    mutate(order = newtax$order) %>%
-    mutate(family = newtax$family) %>%
-    mutate(genus = newtax$genus) %>%
-    mutate(species = newtax$species)
-  return(ret)
-}
-
-###### auto
-allhits = consensus_tax_high %>%
-  group_by(QueryID) %>%
-  group_modify(~ lca2(.x)) %>%
+lca_df = consensus_tax_high %>%
+  group_modify(~ lca_core(.x)) %>%
   slice(1) %>% #keep only first row in each group (one per read)
+  filter(is.na(last_common)==FALSE) %>%
   summarize(last_common) 
 
-taxa_idx = as.numeric(str_extract(allhits$QueryID, regexp))
-taxa_labels = allhits$last_common
+regexp <- "[[:digit:]]+"
+taxa_idx = as.numeric(str_extract(lca_df$QueryID, regexp))
+taxa_labels = lca_df$last_common
 taxa <- data.frame()
 taxa <- cbind(taxa_idx,taxa_labels)
-names <- unique(allhits$last_common)
+names <- unique(lca_df$last_common)
 
 idx_dend = as.numeric(unique(str_extract(consensus_tax_high$QueryID, regexp))) %>% sort()
 color_vec <- matrix(1,optSubtrees,1)
@@ -228,8 +192,13 @@ circos.par(cell.padding = c(0, 0, 0, 0))
 labels <- as.numeric(clusterMax %>% 
                        labels)
 m = length(labels)
-leg_names = c(names,'No BLAST Hits')
-leg_col = c(1+seq(2:(length(names)+1)),1)
+leg_names = c(names,'No Lowest Common\nAncestor')
+if (length(names) > 1){
+  leg_col = c(1+seq(2:(length(names)+1)),1)
+} else {
+  leg_col = c(2,1)
+}
+
 circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
 dend = color_branches(clusterMax, k = optSubtrees, col = color_vec)
 dend_height = attr(dend, "height")
@@ -237,6 +206,6 @@ circos.track(ylim = c(0, dend_height), bg.border = NA,
              track.height = 0.4, panel.fun = function(x, y) {
                circos.dendrogram(dend)
              })
-title(main='High Complexity Dark Matter')
-legend(x=-0.3, y=0.25, legend=leg_names, bty='n', text.col=leg_col, cex=0.8)
+title(main='Low Complexity Dark Matter')
+legend(x=-0.3, y=0.5, legend=leg_names, bty='n', text.col=leg_col, cex=0.6)
 circos.clear()

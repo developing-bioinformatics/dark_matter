@@ -163,8 +163,6 @@ length(cutoff_df$meanQ[cutoff_df$cluster==4])
 
 ##### dendrograms
 
-
-
 lca = function(x) {
   require(dplyr)
   taxnames = c('superkingdom', 'phylum', 'order', 'family', 'genus', 'species')
@@ -178,10 +176,33 @@ lca = function(x) {
   return(ret)
 }
 
-regexp <- "[[:digit:]]+"
+lca2 = function(x) {
+  require(dplyr)
+  taxnames = c('superkingdom', 'phylum', 'order', 'family', 'genus', 'species')
+  shortnames = apply(x[,taxnames], 2, unique)
+  countshnames = sapply(shortnames, length)
+  numcount = countshnames==1
+  lastuni = tail(names(shortnames[numcount==TRUE]), n=1)
+  nombre = as.data.frame(x[1,which(colnames(x) == lastuni)])
+  newtax <- as.list(ifelse(countshnames==1,shortnames,NA))
+  
+  ret = x %>% 
+    mutate(last_common = as.character(nombre[[1]])) %>%
+    mutate(level_lca = lastuni) %>%
+    mutate(superkingdom = newtax$superkingdom) %>%
+    mutate(phylum = newtax$phylum) %>%
+    mutate(class = newtax$class) %>%
+    mutate(order = newtax$order) %>%
+    mutate(family = newtax$family) %>%
+    mutate(genus = newtax$genus) %>%
+    mutate(species = newtax$species)
+  return(ret)
+}
+
+###### auto
 allhits = consensus_tax_high %>%
   group_by(QueryID) %>%
-  group_modify(~ lca(.x)) %>%
+  group_modify(~ lca2(.x)) %>%
   slice(1) %>% #keep only first row in each group (one per read)
   summarize(last_common) 
 
@@ -189,82 +210,27 @@ taxa_idx = as.numeric(str_extract(allhits$QueryID, regexp))
 taxa_labels = allhits$last_common
 taxa <- data.frame()
 taxa <- cbind(taxa_idx,taxa_labels)
-unique(allhits$last_common)
+names <- unique(allhits$last_common)
 
 idx_dend = as.numeric(unique(str_extract(consensus_tax_high$QueryID, regexp))) %>% sort()
 color_vec <- matrix(1,optSubtrees,1)
 color_vec <- as.numeric(color_vec)
 n= length(taxa_idx)
 for (i in seq_len(n)){
-  if (taxa[n+i] =="Streptophyta"){
-    color_vec[as.numeric(taxa[i])] = 2
-  } else if (taxa[n+i]=="Sapindaceae"){
-    color_vec[as.numeric(taxa[i])] = 3
-  } else if (taxa[n+i]=="Sapindales"){
-    color_vec[as.numeric(taxa[i])] = 4
+  for (j in seq(1:length(names))){
+    if (taxa[n+i] == names[j]){
+      color_vec[as.numeric(taxa[i])] = j+1
+    }
   }
 }
-
-
 
 circos.par(cell.padding = c(0, 0, 0, 0))
 labels <- as.numeric(clusterMax %>% 
                        labels)
 m = length(labels)
+leg_names = c(names,'No BLAST Hits')
+leg_col = c(1+seq(2:(length(names)+1)),1)
 circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
-dend = color_branches(clusterMax, k = optSubtrees, col = color_vec)
-dend_height = attr(dend, "height")
-circos.track(ylim = c(0, dend_height), bg.border = NA, 
-             track.height = 0.4, panel.fun = function(x, y) {
-               circos.dendrogram(dend)
-             })
-title(main='Low Complexity Dark Matter')
-legend(x=-0.3, y=0.25, legend=c('Streptophyta','Sapindaceae','Sapindales','No BLAST Hits'), bty='n', text.col=c('red','green','blue','black'), cex=0.9)
-circos.clear()
-
-# circos.track(ylim = c(0, 1), bg.border = NA, track.height = 0.3, 
-#              panel.fun = function(x, y) {
-#                for(i in seq(1:970)) {
-#                  circos.text(i-0.5, 0, labels_vec[i], adj = c(0, 0.5), 
-#                              facing = "clockwise", niceFacing = TRUE,
-#                              col = 2, cex = 0.5)
-#                }
-#              })
-
-allhits = consensus_tax_high %>%
-  group_by(QueryID) %>%
-  group_modify(~ lca(.x)) %>%
-  slice(1) %>% #keep only first row in each group (one per read)
-  summarize(last_common) 
-
-taxa_idx = as.numeric(str_extract(allhits$QueryID, regexp))
-taxa_labels = allhits$last_common
-taxa <- data.frame()
-taxa <- cbind(taxa_idx,taxa_labels)
-unique(allhits$last_common)
-
-idx_dend = as.numeric(unique(str_extract(consensus_tax_high$QueryID, regexp))) %>% sort()
-color_vec <- matrix(1,optSubtrees,1)
-color_vec <- as.numeric(color_vec)
-n= length(taxa_idx)
-for (i in seq_len(n)){
-  if (taxa[n+i] =="Streptophyta"){
-    color_vec[as.numeric(taxa[i])] = 2
-  } else if (taxa[n+i]=="Sapindaceae"){
-    color_vec[as.numeric(taxa[i])] = 3
-  } else if (taxa[n+i]=="Burseraceae"){
-    color_vec[as.numeric(taxa[i])] = 4
-  }
-}
-
-
-
-circos.par(cell.padding = c(0, 0, 0, 0))
-labels <- as.numeric(clusterMax %>% 
-                       labels)
-m = length(labels)
-circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
-
 dend = color_branches(clusterMax, k = optSubtrees, col = color_vec)
 dend_height = attr(dend, "height")
 circos.track(ylim = c(0, dend_height), bg.border = NA, 
@@ -272,6 +238,5 @@ circos.track(ylim = c(0, dend_height), bg.border = NA,
                circos.dendrogram(dend)
              })
 title(main='High Complexity Dark Matter')
-legend(x=-0.3, y=0.25, legend=c('Streptophyta','Sapindaceae','Burseraceae','No BLAST Hits'), bty='n', text.col=c('red','green','blue','black'), cex=0.8)
+legend(x=-0.3, y=0.25, legend=leg_names, bty='n', text.col=leg_col, cex=0.8)
 circos.clear()
-

@@ -44,9 +44,7 @@ escore = c('1e-10')
 p = proc.time()
 idx_srr = 9
 srr = srr_list[idx_srr]
-#dna = readFastq('./data/', pattern=srr_list[idx_srr])
-#reads = sread(dna)
-
+complexity_group <- "high"
 
 
 blasthits_ncbi <- rBLAST_pre(srr_list,idx_srr,escore,cores)
@@ -65,7 +63,12 @@ cutoff_plot <- dustyCutoffs(srr_list[idx_srr],
                             verbose=TRUE)
 cutoff_plot #plot the object
 try({
-  clusterMax <- get_clusters(srr_list[idx_srr], cutoff_df, cluster_cutoff=0.01, complexity="high", escore, cores)
+  clusterMax <- get_clusters(srr_list[idx_srr],
+                             cutoff_df,
+                             cluster_cutoff=0.01,
+                             complexity=complexity_group, 
+                             escore, 
+                             cores)
   },silent=TRUE)
 
 #Maximize number of subtrees with tryCatch loop. Returns highest possible number of subclusters.
@@ -86,7 +89,7 @@ tryCatch(
                                     stag_threshold=5,
                                     consensus_threshold=0.5,
                                     consensus_min=0.5,
-                                    complexity="high",
+                                    complexity=complexity_group,
                                     cores=cores)
     }
   },
@@ -103,18 +106,23 @@ tryCatch(
                                       stag_threshold=5,
                                       consensus_threshold=0.5,
                                       consensus_min=0.5,
-                                      complexity="high",
+                                      complexity=complexity_group,
                                       cores=cores)
   }
 )
 
 BrowseSeqs(consensus_seqs) #visual inspection
  
-consensus_tax_high <- consensus_taxa(consensus_seqs, escore, cores)
+consensus_tax_high <- consensus_taxa(consensus_seqs, 
+                                     escore, 
+                                     cores)
  
 #unique(consensus_tax_high$QueryID)
 
-recovered <- fracIdentity(consensus_tax_high, cutoff_df, dend_list, complexity='high')
+recovered <- fracIdentity(consensus_tax_high, 
+                          cutoff_df, 
+                          dend_list, 
+                          complexity=complexity_group)
 
 # save cluster plot
 out1 <- paste("outputs/dusty_clusters_",srr,".png", sep="")
@@ -122,11 +130,9 @@ ggsave(cutoff_plot, file=out1, height = 9, width = 7, dpi=500)
 
 #proc.time() - p
 
-# save data image
-save.image(paste('outputs/save',srr_list[idx_srr],'_consensus_HIGHCOMPLEXITY.RData',sep=''))
 
 # write FASTA of consensus sequences
-writeFasta(consensus_seqs,paste('outputs/consensus',srr_list[idx_srr],'_HIGHCOMPLEXITY.fa',sep=''))
+writeFasta(consensus_seqs,paste('outputs/consensus',srr_list[idx_srr],'_',complexity_group,'.fa',sep=''))
 
 
 mean(cutoff_df$Dusty[cutoff_df$cluster==1])
@@ -164,10 +170,11 @@ length(cutoff_df$meanQ[cutoff_df$cluster==4])
 ##### dendrograms
 
 lca_df = consensus_tax_high %>%
-  group_modify(~ lca_core(.x)) %>%
+  group_modify(~ lca_core(.x)) %>% # run lca
   slice(1) %>% #keep only first row in each group (one per read)
-  filter(is.na(last_common)==FALSE) %>%
   summarize(last_common) 
+
+lca_df[is.na(lca_df)] <- "Unknown"
 
 regexp <- "[[:digit:]]+"
 taxa_idx = as.numeric(str_extract(lca_df$QueryID, regexp))
@@ -192,11 +199,19 @@ circos.par(cell.padding = c(0, 0, 0, 0))
 labels <- as.numeric(clusterMax %>% 
                        labels)
 m = length(labels)
-leg_names = c(names,'No Lowest Common\nAncestor')
+leg_names = c(names,'No BLAST Hits')
 if (length(names) > 1){
   leg_col = c(1+seq(2:(length(names)+1)),1)
 } else {
   leg_col = c(2,1)
+}
+
+if (complexity_group == "high"){
+  main_title <- paste("High Complexity Dark Matter ",srr_list[idx_srr],sep="")
+} else if (complexity_group == "low"){
+  main_title <- paste("Low Complexity Dark Matter ",srr_list[idx_srr],sep="")
+} else if (complexity_group == "all"){
+  main_title <- paste("Dark Matter ",srr_list[idx_srr],sep="")
 }
 
 circos.initialize(factors = "a", xlim = c(0, m)) # only one sector
@@ -206,6 +221,9 @@ circos.track(ylim = c(0, dend_height), bg.border = NA,
              track.height = 0.4, panel.fun = function(x, y) {
                circos.dendrogram(dend)
              })
-title(main='Low Complexity Dark Matter')
+title(main=main_title)
 legend(x=-0.3, y=0.5, legend=leg_names, bty='n', text.col=leg_col, cex=0.6)
 circos.clear()
+
+# save data image
+save.image(paste('outputs/save',srr_list[idx_srr],'_consensus_',complexity_group,'.RData',sep=''))
